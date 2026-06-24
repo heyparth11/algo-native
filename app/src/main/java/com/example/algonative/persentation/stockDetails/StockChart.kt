@@ -1,14 +1,26 @@
 package com.example.algonative.persentation.stockDetails
 
-
 import android.graphics.PointF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -16,8 +28,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.algonative.domain.model.Candle
+import kotlin.math.roundToInt
 
 @Composable
 fun StockJsonChart(
@@ -45,26 +63,75 @@ fun StockJsonChart(
         maxOf(maxPrice - minPrice, 1.0)
     }
 
-    Canvas(
+    var activeX by remember { mutableStateOf<Float?>(null) }
+    var isDragging by remember { mutableStateOf(false) }
+    var canvasWidth by remember { mutableStateOf(0f) }
+    var canvasHeight by remember { mutableStateOf(0f) }
+
+    val totalPoints = closePrices.size
+
+    val selectedIndex = remember(activeX, canvasWidth, totalPoints) {
+        val x = activeX
+        if (x != null && canvasWidth > 0 && totalPoints > 0) {
+            val fraction = (x / canvasWidth).coerceIn(0f, 1f)
+            (fraction * (totalPoints - 1)).roundToInt().coerceIn(0, totalPoints - 1)
+        } else {
+            null
+        }
+    }
+
+    val selectedCandle = remember(selectedIndex, sortedData) {
+        selectedIndex?.let { idx ->
+            if (idx < sortedData.size) sortedData[idx] else null
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(250.dp)
             .padding(vertical = 16.dp)
     ) {
-        val width = size.width
-        val height = size.height
-        val totalPoints = closePrices.size
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { size ->
+                    canvasWidth = size.width.toFloat()
+                    canvasHeight = size.height.toFloat()
+                }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val anyPressed = event.changes.any { it.pressed }
+                            if (anyPressed) {
+                                val change = event.changes.firstOrNull { it.pressed } ?: event.changes.first()
+                                activeX = change.position.x
+                                isDragging = true
+                                change.consume()
+                            } else {
+                                activeX = null
+                                isDragging = false
+                            }
+                        }
+                    }
+                }
+        ) {
+            val width = size.width
+            val height = size.height
+            if (width == 0f || height == 0f) return@Canvas
 
-        // Calculate absolute Canvas point offsets
-        val coordinates = closePrices.mapIndexed { index, closePrice ->
-            val x = if (totalPoints > 1) (index.toFloat() / (totalPoints - 1)) * width else 0f
-            val y = height - (((closePrice - minPrice) / priceRange) * height)
-            PointF(x, y.toFloat())
-        }
+            // Calculate absolute Canvas point offsets
+            val coordinates = closePrices.mapIndexed { index, closePrice ->
+                val x = if (totalPoints > 1) (index.toFloat() / (totalPoints - 1)) * width else 0f
+                val y = height - (((closePrice - minPrice) / priceRange) * height)
+                PointF(x, y.toFloat())
+            }
 
-        // Build smooth Bézier transitions
-        val strokePath = Path().apply {
-            if (coordinates.isNotEmpty()) {
+            if (coordinates.isEmpty()) return@Canvas
+
+            // Build smooth Bézier transitions
+            val strokePath = Path().apply {
                 moveTo(coordinates.first().x, coordinates.first().y)
                 for (i in 0 until coordinates.size - 1) {
                     val p1 = coordinates[i]
@@ -84,60 +151,136 @@ fun StockJsonChart(
                     )
                 }
             }
+
+            // Closed path loop to paint the vertical background fill gradient
+            val fillPath = Path().apply {
+                addPath(strokePath)
+                lineTo(width, height)
+                lineTo(0f, height)
+                close()
+            }
+
+            // Draw fading color gradient block
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        lineColor.copy(alpha = 0.35f),
+                        lineColor.copy(alpha = 0.02f),
+                        Color.Transparent
+                    ),
+                    startY = 0f,
+                    endY = height
+                )
+            )
+
+            // Draw top slick accent line
+            drawPath(
+                path = strokePath,
+                color = lineColor,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+
+            // Draw selection vertical line and highlight dot if user is hovering/interacting
+            if (selectedIndex != null && selectedIndex < coordinates.size) {
+                val selectedPoint = coordinates[selectedIndex]
+                
+                // Draw vertical dashed line
+                drawLine(
+                    color = Color.LightGray.copy(alpha = 0.7f),
+                    start = Offset(selectedPoint.x, 0f),
+                    end = Offset(selectedPoint.x, height),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                )
+
+                // Draw highlight dot (blue outer, white inner)
+                drawCircle(
+                    color = lineColor,
+                    radius = 6.dp.toPx(),
+                    center = Offset(selectedPoint.x, selectedPoint.y)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 3.dp.toPx(),
+                    center = Offset(selectedPoint.x, selectedPoint.y)
+                )
+            } else if (coordinates.isNotEmpty()) {
+                // Draw default current price threshold indicator (Uses the latest/most recent entry)
+                val latestPoint = coordinates.last() // The right-most data node
+
+                drawLine(
+                    color = dottedLineColor,
+                    start = Offset(0f, latestPoint.y),
+                    end = Offset(latestPoint.x, latestPoint.y),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                )
+
+                // Dynamic tracking node knob placement matching mockup design
+                drawCircle(
+                    color = Color.Black,
+                    radius = 5.dp.toPx(),
+                    center = Offset(latestPoint.x, latestPoint.y)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 3.dp.toPx(),
+                    center = Offset(latestPoint.x, latestPoint.y)
+                )
+            }
         }
 
-        // Closed path loop to paint the vertical background fill gradient
-        val fillPath = Path().apply {
-            addPath(strokePath)
-            lineTo(width, height)
-            lineTo(0f, height)
-            close()
-        }
+        // Float tooltip over selected point
+        if (selectedIndex != null && selectedCandle != null && canvasWidth > 0 && canvasHeight > 0) {
+            val fraction = selectedIndex.toFloat() / (totalPoints - 1).coerceAtLeast(1)
+            val selectedPointX = fraction * canvasWidth
+            val yFraction = ((selectedCandle.close - minPrice) / priceRange).toFloat()
+            val selectedPointY = canvasHeight - (yFraction * canvasHeight)
 
-        // Draw fading color gradient block
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    lineColor.copy(alpha = 0.35f),
-                    lineColor.copy(alpha = 0.02f),
-                    Color.Transparent
-                ),
-                startY = 0f,
-                endY = height
-            )
-        )
+            val density = LocalDensity.current
 
-        // Draw top slick accent line
-        drawPath(
-            path = strokePath,
-            color = lineColor,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        )
+            val tooltipX = with(density) { selectedPointX.toDp() }
+            val tooltipY = with(density) { selectedPointY.toDp() }
+            val canvasWidthDp = with(density) { canvasWidth.toDp() }
 
-        // Draw current price threshold indicator (Uses the latest/most recent entry)
-        if (coordinates.isNotEmpty()) {
-            val latestPoint = coordinates.last() // The right-most data node
+            // Define tooltip size parameters to calculate perfect positioning bounds
+            val tooltipWidth = 100.dp
+            val tooltipHalfWidth = 50.dp
+            
+            // Constrain X offset to keep the tooltip fully visible on screen
+            val offsetX = (tooltipX - tooltipHalfWidth).coerceIn(0.dp, maxOf(0.dp, canvasWidthDp - tooltipWidth))
+            
+            // Determine Y offset (show below point if too close to top edge)
+            val offsetY = if (tooltipY - 55.dp < 0.dp) {
+                tooltipY + 15.dp
+            } else {
+                tooltipY - 55.dp
+            }
 
-            drawLine(
-                color = dottedLineColor,
-                start = Offset(0f, latestPoint.y),
-                end = Offset(latestPoint.x, latestPoint.y),
-                strokeWidth = 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-            )
-
-            // Dynamic tracking node knob placement matching mockup design
-            drawCircle(
-                color = Color.Black,
-                radius = 5.dp.toPx(),
-                center = Offset(latestPoint.x, latestPoint.y)
-            )
-            drawCircle(
-                color = Color.White,
-                radius = 3.dp.toPx(),
-                center = Offset(latestPoint.x, latestPoint.y)
-            )
+            Box(
+                modifier = Modifier
+                    .offset(x = offsetX, y = offsetY)
+                    .shadow(6.dp, RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .width(tooltipWidth),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$${"%.2f".format(selectedCandle.close)}",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = selectedCandle.date,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 9.sp
+                    )
+                }
+            }
         }
     }
 }

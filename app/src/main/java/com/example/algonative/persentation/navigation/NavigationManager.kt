@@ -1,28 +1,35 @@
 package com.example.algonative.persentation.navigation
 
 import androidx.navigation.NavHostController
+import java.lang.ref.WeakReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class NavigationManager @Inject constructor() {
 
-    private var navController: NavHostController? = null
+    private var navControllerRef: WeakReference<NavHostController>? = null
 
     fun setController(controller: NavHostController) {
-        navController = controller
+        navControllerRef = WeakReference(controller)
+    }
+
+    fun clearController(controller: NavHostController) {
+        if (navControllerRef?.get() == controller) {
+            navControllerRef = null
+        }
     }
 
     fun navigate(route: String) {
-        navController?.navigate(route)
+        navControllerRef?.get()?.navigate(route)
     }
 
     fun popBackStack() {
-        navController?.popBackStack()
+        navControllerRef?.get()?.popBackStack()
     }
 
     fun navigateAndClear(route: String) {
-        navController?.navigate(route) {
+        navControllerRef?.get()?.navigate(route) {
             popUpTo(0)
         }
     }

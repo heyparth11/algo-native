@@ -79,6 +79,14 @@ fun StockDetailsScreen(
         .candles
         .collectAsStateWithLifecycle()
 
+    val selectedTimeframe by viewModel
+        .selectedTimeframe
+        .collectAsStateWithLifecycle()
+
+    val isChartLoading by viewModel
+        .isChartLoading
+        .collectAsStateWithLifecycle()
+
     var selectedTab by rememberSaveable {
         mutableIntStateOf(0)
     }
@@ -122,16 +130,70 @@ fun StockDetailsScreen(
 
                         item { Spacer(modifier = Modifier.height(24.dp)) }
 
-                        item { PriceSection(stock = it) }
+                        item { PriceSection(stock = it, selectedTimeframe = selectedTimeframe) }
 
                         item {
-                            StockJsonChart(
-                                rawHistoryPoints = candles,
-                                lineColor = Color(0xFF2172E5)
-                            )
+                            if (isChartLoading) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(250.dp)
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = Color(0xFF2172E5)
+                                    )
+                                }
+                            } else {
+                                Column {
+                                    StockJsonChart(
+                                        rawHistoryPoints = candles,
+                                        lineColor = Color(0xFF2172E5)
+                                    )
+
+                                    if (selectedTimeframe == "1D" || selectedTimeframe == "1W") {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 20.dp)
+                                                .background(
+                                                    Color(0xFFF3F4F6),
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "💡",
+                                                    fontSize = 14.sp
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Intraday data is restricted on the free API key. Showing daily closes.",
+                                                    color = Color(0xFF4B5563),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(12.dp))
+                                    }
+                                }
+                            }
                         }
 
-                        item { TimeRangeSelector() }
+                        item {
+                            TimeRangeSelector(
+                                selectedRange = selectedTimeframe,
+                                onRangeSelected = { range ->
+                                    viewModel.setTimeframe(range)
+                                }
+                            )
+                        }
 
                         item { CreateSipCard() }
 
@@ -190,7 +252,7 @@ fun StockDetailsTopBar(
 }
 
 @Composable
-fun PriceSection(stock: StockListItem) {
+fun PriceSection(stock: StockListItem, selectedTimeframe: String ) {
 
     Column(
         modifier = Modifier.padding(horizontal = 20.dp)
@@ -228,7 +290,7 @@ fun PriceSection(stock: StockListItem) {
             Spacer(Modifier.width(8.dp))
 
             Text(
-                "1D",
+                selectedTimeframe,
                 color = Color.Gray
             )
         }
@@ -236,7 +298,10 @@ fun PriceSection(stock: StockListItem) {
 }
 
 @Composable
-fun TimeRangeSelector() {
+fun TimeRangeSelector(
+    selectedRange: String,
+    onRangeSelected: (String) -> Unit
+) {
 
     val items = listOf(
         "1D",
@@ -247,10 +312,6 @@ fun TimeRangeSelector() {
         "ALL"
     )
 
-    var selected by remember {
-        mutableIntStateOf(0)
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -258,16 +319,17 @@ fun TimeRangeSelector() {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
 
-        items.forEachIndexed { index, title ->
+        items.forEach { title ->
+            val isSelected = selectedRange == title
 
             Surface(
-                color = if (selected == index)
+                color = if (isSelected)
                     Color(0xFFE8EEFF)
                 else
                     Color.Transparent,
                 shape = RoundedCornerShape(10.dp),
                 onClick = {
-                    selected = index
+                    onRangeSelected(title)
                 }
             ) {
 

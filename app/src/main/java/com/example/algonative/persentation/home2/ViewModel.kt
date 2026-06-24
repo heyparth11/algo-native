@@ -17,7 +17,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class StockViewModel @Inject constructor(
-    private val navigationManager: NavigationManager
+    private val navigationManager: NavigationManager,
+    private val repository: StockRepository,
+    private val socketManager: FinnhubSocketManager
 ) : ViewModel() {
 
     fun navigateToStockDetail(stock: StockListItem) {
@@ -28,24 +30,12 @@ class StockViewModel @Inject constructor(
         navigationManager.navigate(Routes.ROBO)
     }
 
-    private val repository = StockRepository()
-
-    private val socketManager =
-        FinnhubSocketManager(
-            BuildConfig.FINNHUB_API_KEY
-        )
-
-//    private val _stocks =
-//        MutableStateFlow<List<Stock>>(emptyList())
-
     private val _uiState =
         MutableStateFlow<StockListUiState>(
             StockListUiState.Loading
         )
 
     val uiState = _uiState.asStateFlow()
-
-//    val stocks = _stocks.asStateFlow()
 
     init {
         loadStocks()

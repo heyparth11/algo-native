@@ -7,27 +7,11 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-
-enum class Destination(
-    val route: String,
-    val label: String,
-    val contentDescription: String
-) {
-    CHART("chart", "Chart", "Charts"),
-    STOCKINFO("stockinfo", "Stock Info", "StockInfo"),
-    FO("fo", "F&O", "fo"),
-    NEWS("news", "News", "News")
-}
 
 @Composable
 fun CommonTabs2(
@@ -35,34 +19,30 @@ fun CommonTabs2(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    val startDestination = Destination.CHART
-
-    var selectedDestination by rememberSaveable { mutableIntStateOf(startDestination.ordinal) }
-
     PrimaryScrollableTabRow(
-        selectedTabIndex = selectedDestination,
+        selectedTabIndex = selectedTab,
         modifier = Modifier.padding(4.dp),
         containerColor = Color.Transparent,
         edgePadding = 0.dp,
         contentColor = Color.Black,
         indicator = {
             TabRowDefaults.SecondaryIndicator(
-                modifier = Modifier.tabIndicatorOffset(selectedDestination),
+                modifier = Modifier.tabIndicatorOffset(selectedTab),
                 color = Color.Black
             )
         },
         divider = {}
     ) {
-        Destination.entries.forEachIndexed { index, destination ->
+        tabs.forEachIndexed { index, title ->
             Tab(
                 interactionSource = remember { MutableInteractionSource() },
-                selected = selectedDestination == index,
+                selected = selectedTab == index,
                 onClick = {
-                    selectedDestination = index
+                    onTabSelected(index)
                 },
                 text = {
                     Text(
-                        text = destination.label,
+                        text = title,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )

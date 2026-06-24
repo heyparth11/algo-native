@@ -4,9 +4,7 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.algonative.BuildConfig
 import com.example.algonative.data.repository.ChartRepository
-import com.example.algonative.data.repository.StockRepository
 import com.example.algonative.data.socket.FinnhubSocketManager
 import com.example.algonative.domain.model.Candle
 import com.example.algonative.domain.model.StockListItem
@@ -22,15 +20,9 @@ import javax.inject.Inject
 @HiltViewModel
 class StockDetailViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
-    private val chartRepository: ChartRepository
+    private val chartRepository: ChartRepository,
+    private val socketManager: FinnhubSocketManager
 ) : ViewModel() {
-
-    private val repository = StockRepository()
-
-    private val socketManager =
-        FinnhubSocketManager(
-            BuildConfig.FINNHUB_API_KEY
-        )
 
     private val _uiState =
         MutableStateFlow<StockDetailUiState>(
@@ -46,6 +38,16 @@ class StockDetailViewModel @Inject constructor(
         MutableStateFlow<List<Candle>>(emptyList())
 
     val candles = _candles.asStateFlow()
+
+    private val _isChartLoading =
+        MutableStateFlow(false)
+
+    val isChartLoading = _isChartLoading.asStateFlow()
+
+    private val _selectedTimeframe =
+        MutableStateFlow("1M")
+
+    val selectedTimeframe = _selectedTimeframe.asStateFlow()
 
     val uiState =
         _uiState.asStateFlow()
@@ -92,15 +94,22 @@ class StockDetailViewModel @Inject constructor(
         loadCandles()
     }
 
+    fun setTimeframe(timeframe: String) {
+        if (_selectedTimeframe.value == timeframe) return
+        _selectedTimeframe.value = timeframe
+        loadCandles()
+    }
+
     private fun loadCandles() {
 
         viewModelScope.launch {
-
+            _isChartLoading.value = true
             try {
 
                 val candles =
                     chartRepository.getCandles(
-                        symbol
+                        symbol = symbol,
+                        timeframe = _selectedTimeframe.value
                     )
 
                 _candles.value = candles
@@ -109,9 +118,11 @@ class StockDetailViewModel @Inject constructor(
 
                 Log.e(
                     "StockDetail",
-                    "Failed to load candles",
+                    "Failed to load candles for timeframe ${_selectedTimeframe.value}",
                     e
                 )
+            } finally {
+                _isChartLoading.value = false
             }
         }
     }

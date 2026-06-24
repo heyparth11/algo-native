@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.compose.rememberNavController
 import com.example.algonative.persentation.RootScaffold
@@ -36,8 +37,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
 
-            LaunchedEffect(Unit) {
+            DisposableEffect(navController) {
                 navigationManager.setController(navController)
+                onDispose {
+                    navigationManager.clearController(navController)
+                }
             }
             RootScaffold(
                 navController = navController
